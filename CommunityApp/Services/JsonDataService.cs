@@ -24,6 +24,13 @@ public class JsonDataService
 
     public void SaveData<T>(string filePath, List<T> data)
     {
+        var directory = Path.GetDirectoryName(filePath);
+        
+        if (!Directory.Exists(directory))
+        {
+            Directory.CreateDirectory(directory!);
+        }
+
         var json = JsonSerializer.Serialize(data, _options);
         File.WriteAllText(filePath, json);
     }
