@@ -15,10 +15,9 @@ public class Menu
     {
         while (true)
         {
-            if (_currentUser == null)
+            if (_currentUser == null && (_currentUser = _loginView.Show()) == null)
             {
-                _currentUser = _loginView.Show();
-                continue;
+                return;
             }
 
             AnsiConsole.Clear();

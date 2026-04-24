@@ -21,11 +21,22 @@ public class LoginView
 
         if (residents == null || !residents.Any())
         {
-            AnsiConsole.MarkupLine("[red]No users found in system.[/]");
-            AnsiConsole.MarkupLine("[grey]Press any key to exit...[/]");
-            Console.ReadKey();
-            return null;
+            residents = new List<Resident>
+            {
+            new Resident { Name = "Admin", Role = Role.Admin, Address = "N/A" },
+            new Resident { Name = "Resident", Role = Role.Resident, Address = "N/A" }
+            };
         }
+        
+        AnsiConsole.MarkupLine("[yellow]No users found. Creating default users...[/]");
+        UIHelpers.PressAnyKey();
+
+        _dataService.SaveData(_residentsPath, residents);
+
+        AnsiConsole.MarkupLine("[green]Default users created![/]");
+        UIHelpers.PressAnyKey();
+
+        residents = _dataService.LoadData<Resident>(_residentsPath);
 
         var selected = AnsiConsole.Prompt(
             new SelectionPrompt<Resident>()
@@ -35,8 +46,7 @@ public class LoginView
                 .AddChoices(residents));
 
         AnsiConsole.MarkupLine($"[green]Logged in as {selected.Name}[/]");
-        AnsiConsole.MarkupLine("[grey]Press any key to continue...[/]");
-        Console.ReadKey();
+        UIHelpers.PressAnyKey();
 
         return selected;
     }
