@@ -154,8 +154,10 @@ public class EventView
 
     public void SaveEventToCalendar(Event ev)
     {
-        var _currentUser = GetCurrentUser();
         var residents = new JsonDataService().LoadData<Resident>("Data/residents.json");
+        var _currentUser = Globals.CurrentUser != null
+            ? residents.FirstOrDefault(r => r.Id == Globals.CurrentUser.Id)
+            : null;
         if (_currentUser == null)
         {
             AnsiConsole.MarkupLine("[red]User not found. Cannot save event to calendar.[/]");
