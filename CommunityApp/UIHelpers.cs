@@ -1,13 +1,12 @@
 using Spectre.Console;
 
-namespace CommunityApp
+namespace CommunityApp;
+
+public static class UIHelpers
 {
-    public static class UIHelpers
+    public static void PressAnyKey(string markup = "[grey]Press any key to continue...[/]")
     {
-        public static void PressAnyKey(string markup = "[grey]Press any key to continue...[/]")
-        {
-            AnsiConsole.MarkupLine(markup);
-            Console.ReadKey();
-        }
+        AnsiConsole.MarkupLine(markup);
+        Console.ReadKey();
     }
 }

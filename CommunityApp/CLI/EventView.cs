@@ -6,6 +6,14 @@ public class EventView
 {
     private readonly EventService _eventService = new();
 
+    private Resident GetCurrentUser()
+    {
+        var residents = new JsonDataService().LoadData<Resident>("Data/residents.json");
+        return Globals.CurrentUser != null
+            ? residents.FirstOrDefault(r => r.Id == Globals.CurrentUser.Id)
+            : null;
+    }
+
     public void Add(Resident currentUser)
     {
         AnsiConsole.Clear();
@@ -22,6 +30,13 @@ public class EventView
                 .Validate(input => string.IsNullOrWhiteSpace(input)
                     ? ValidationResult.Error("[red]Description is required[/]")
                     : ValidationResult.Success()));
+
+        var eventType = AnsiConsole.Prompt(
+            new SelectionPrompt<EventType>()
+                .Title("Select [green]event type[/]:")
+                .AddChoices(EventType.Standard, EventType.GroupActivity));
+
+        List<TimeSlot> timeSlots = new();
 
         var location = AnsiConsole.Prompt(
             new TextPrompt<string>("Enter [green]location[/]:")
@@ -62,7 +77,6 @@ public class EventView
         }
 
         bool hasConflict = _eventService.HasConflict(start, end);
-        EventType eventType;
 
         if (hasConflict)
         {
@@ -74,12 +88,32 @@ public class EventView
                 Console.ReadKey();
                 return;
             }
-            eventType = EventType.Standard;
         }
         else
         {
-            eventType = EventType.Standard;
-            AnsiConsole.MarkupLine("[grey]Event type: Standard[/]");
+            AnsiConsole.MarkupLine($"[grey]Event type: {eventType}[/]");
+        }
+
+        if (eventType == EventType.GroupActivity)
+        {
+            var slotLength = AnsiConsole.Prompt(
+                new SelectionPrompt<int>()
+                    .Title("Select [yellow]time slot length[/] (minutes):")
+                    .AddChoices(30, 60)
+            );
+
+            var duration = end - start;
+            int totalSlots = (int)(duration.TotalMinutes / slotLength);
+
+            for (int i = 0; i < totalSlots; i++)
+            {
+                var slotStart = start.AddMinutes(i * slotLength);
+                var slotEnd = slotStart.AddMinutes(slotLength);
+                int maxParticipants = AnsiConsole.Prompt(
+                    new TextPrompt<int>($"Max participants for slot {slotStart:HH:mm} - {slotEnd:HH:mm}:").DefaultValue(10)
+                );
+                timeSlots.Add(new TimeSlot { Start = slotStart, End = slotEnd, MaxParticipants = maxParticipants });
+            }
         }
 
         if (!AnsiConsole.Confirm("Save event?"))
@@ -89,6 +123,7 @@ public class EventView
             Console.ReadKey();
             return;
         }
+
 
         var creator = new Resident
         {
@@ -106,7 +141,8 @@ public class EventView
             Start = start,
             End = end,
             EventType = eventType,
-            CreatedBy = creator
+            CreatedBy = creator,
+            TimeSlots = timeSlots
         };
 
         _eventService.Save(ev);
@@ -114,6 +150,29 @@ public class EventView
         AnsiConsole.MarkupLine("[green]✔ Event saved successfully![/]");
         AnsiConsole.MarkupLine("[grey]Press any key to return...[/]");
         Console.ReadKey();
+    }
+
+    public void SaveEventToCalendar(Event ev)
+    {
+        var _currentUser = GetCurrentUser();
+        var residents = new JsonDataService().LoadData<Resident>("Data/residents.json");
+        if (_currentUser == null)
+        {
+            AnsiConsole.MarkupLine("[red]User not found. Cannot save event to calendar.[/]");
+            return;
+        }
+
+        if (_currentUser.Commitments.Any(c => c.Event.Title == ev.Title && c.Event.Start == ev.Start))
+        {
+            AnsiConsole.MarkupLine("[yellow]Event is already in your calendar.[/]");
+            return;
+        }
+
+        _currentUser.Commitments.Add(new Commitment { Resident = _currentUser, Event = ev, Attending = true });
+        new JsonDataService().SaveData("Data/residents.json", residents);
+
+        AnsiConsole.MarkupLine("[green]✔ Event saved to your calendar![/]");
+
     }
 
     public void ViewAll()
@@ -131,7 +190,14 @@ public class EventView
             return;
         }
 
-        var choices = events.Select(e => $"{e.Start:MMM dd, yyyy h:mm tt} — {e.Title}").ToList();
+        var currentUser = GetCurrentUser();
+        var choices = events.Select(e =>
+        {
+            bool isAttending = _eventService.CurrentUserAttending(e);
+            string attendingText = isAttending ? " ([green]Attending[/])" : "";
+            return $"{e.Start:MMM dd, yyyy h:mm tt} — {e.Title}{attendingText}";
+        }).ToList();
+
         choices.Add("← Back");
 
         var selected = AnsiConsole.Prompt(
@@ -162,5 +228,65 @@ public class EventView
         AnsiConsole.MarkupLine($"[bold]Location:[/] {ev.Location}");
         AnsiConsole.MarkupLine($"[bold]Type:[/] {ev.EventType}");
         AnsiConsole.MarkupLine($"[bold]Created By:[/] {ev.CreatedBy.Name}");
+
+        if (ev.TimeSlots != null && ev.TimeSlots.Any())
+        {
+            AnsiConsole.MarkupLine("[bold]Time Slots:[/]");
+            var slotLabels = ev.TimeSlots.Select((slot, idx) =>
+                $"{idx + 1}. {slot.Start:MMM dd, yyyy HH:mm} to {slot.End:HH:mm} (Max: {slot.MaxParticipants})").ToList();
+
+            var currentUser = GetCurrentUser();
+
+            var alreadySignedUp = new HashSet<int>();
+            if (currentUser != null)
+            {
+                for (int i = 0; i < ev.TimeSlots.Count; i++)
+                {
+                    var slot = ev.TimeSlots[i];
+                    if (slot.Participants != null && slot.Participants.Any(p => p.Id == currentUser.Id))
+                        alreadySignedUp.Add(i);
+                }
+            }
+
+            var selectedSlots = AnsiConsole.Prompt(
+                new MultiSelectionPrompt<string>()
+                    .Title("Select time slots to [green]sign up[/] for (space to select, enter to confirm):")
+                    .NotRequired()
+                    .PageSize(10)
+                    .InstructionsText("[grey](Press <space> to toggle a slot, <enter> to accept)[/]")
+                    .AddChoices(slotLabels.Select((label, idx) =>
+                        alreadySignedUp.Contains(idx) ? $"[green]{label} (Already Signed Up)[/]" : label)));
+
+            if (currentUser != null)
+            {
+                for (int i = 0; i < ev.TimeSlots.Count; i++)
+                {
+                    var label = slotLabels[i];
+                    bool shouldBeSignedUp = selectedSlots.Any(s => s.Contains(label));
+                    var slot = ev.TimeSlots[i];
+
+                    if (shouldBeSignedUp)
+                    {
+                        if (slot.Participants == null)
+                            slot.Participants = new List<Resident>();
+                        if (!slot.Participants.Any(p => p.Id == currentUser.Id))
+                            slot.Participants.Add(currentUser);
+                    }
+                    else
+                    {
+                        if (slot.Participants != null)
+                            slot.Participants.RemoveAll(p => p.Id == currentUser.Id);
+                    }
+                }
+
+                _eventService.Update(ev);
+                AnsiConsole.MarkupLine("[green]Your time slot selections have been updated![/]");
+            }
+        }
+
+        if (AnsiConsole.Confirm("Save this event to your calendar?"))
+        {
+            SaveEventToCalendar(ev);
+        }
     }
 }
