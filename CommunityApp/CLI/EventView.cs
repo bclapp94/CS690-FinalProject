@@ -6,7 +6,7 @@ public class EventView
 {
     private readonly EventService _eventService = new();
 
-    private Resident GetCurrentUser()
+    private Resident? GetCurrentUser()
     {
         var residents = new JsonDataService().LoadData<Resident>("Data/residents.json");
         return Globals.CurrentUser != null
