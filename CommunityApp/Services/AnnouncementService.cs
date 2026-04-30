@@ -23,5 +23,12 @@ namespace CommunityApp
     {
         return _dataService.LoadData<Announcement>(FilePath);
     }
+
+    public List<Announcement> GetByType(AnnouncementType type)
+    {
+        return _dataService.LoadData<Announcement>(FilePath)
+            .Where(a => a.Type == type)
+            .ToList();
+    }
 }
 }

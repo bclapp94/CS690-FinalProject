@@ -3,6 +3,10 @@ namespace CommunityApp
     public enum AnnouncementType
     {
         Normal,
-        AdminAlert
+        AdminAlert,
+        LostAndFound,
+        ForSale,
+        Maintenance,
+        Community
     }
 }
