@@ -147,6 +147,14 @@ public class EventView
 
         _eventService.Save(ev);
 
+        var residents = new JsonDataService().LoadData<Resident>("Data/residents.json");
+        var fullCreator = residents.FirstOrDefault(r => r.Id == currentUser.Id);
+        if (fullCreator != null)
+        {
+            fullCreator.Commitments.Add(new Commitment { Resident = fullCreator, Event = ev, Attending = true });
+            new JsonDataService().SaveData("Data/residents.json", residents);
+        }
+
         AnsiConsole.MarkupLine("[green]✔ Event saved successfully![/]");
         AnsiConsole.MarkupLine("[grey]Press any key to return...[/]");
         Console.ReadKey();
